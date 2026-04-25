@@ -1,0 +1,1 @@
+../../ci-templates/scripts/smoke-test-iso.sh

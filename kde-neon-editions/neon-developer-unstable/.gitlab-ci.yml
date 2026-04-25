@@ -1,0 +1,66 @@
+# KDE Neon Developer Edition (Unstable) — GitLab CI Pipeline
+# Upstream: invent.kde.org/neon  branch: Neon/unstable
+# Archive:  archive.neon.kde.org/dev/unstable
+# Note: builds from KDE master — expected to fail occasionally
+
+include:
+  - project: 'openos-project/kde-ecosystem-deving/kde-groups/neon/ci-templates'
+    ref: main
+    file:
+      - '/iso-build.yml'
+      - '/mirror-sync.yml'
+      - '/manifest-validate.yml'
+
+variables:
+  EDITION: "developer-unstable"
+  NEON_BRANCH: "Neon/unstable"
+  UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+  UPSTREAM_BRANCH: "Neon/unstable"
+  UBUNTU_SERIES: "noble"
+  NEON_ARCHIVE: "http://archive.neon.kde.org/dev/unstable"
+  NEON_ARCHIVE_KEY: "0x45F4C354638D1F29"
+
+stages:
+  - sync
+  - validate
+  - build-iso
+  - publish
+
+sync-upstream:
+  extends: .mirror-sync-base
+  variables:
+    UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+    UPSTREAM_BRANCH: "Neon/unstable"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+validate-manifest:
+  extends: .manifest-validate-base
+  variables:
+    EDITION: "developer-unstable"
+
+build-developer-unstable-iso:
+  extends: .iso-build-base
+  variables:
+    EDITION: "developer-unstable"
+    NEON_BRANCH: "Neon/unstable"
+    UBUNTU_SERIES: "noble"
+    NEON_ARCHIVE: "http://archive.neon.kde.org/dev/unstable"
+  # Unstable builds are allowed to fail — master branch is not guaranteed stable
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      when: manual
+      allow_failure: true
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+publish-developer-unstable-iso:
+  extends: .iso-publish-base
+  needs:
+    - job: build-developer-unstable-iso
+      optional: true   # publish whatever built, even if partial
+  variables:
+    EDITION: "developer-unstable"
+    PUBLISH_PATH: "neon/developer-unstable"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"

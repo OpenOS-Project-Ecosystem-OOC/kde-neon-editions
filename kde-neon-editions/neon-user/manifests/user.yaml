@@ -1,0 +1,92 @@
+# KDE Neon User Edition — package manifest
+# Tracks: Neon/release branch on invent.kde.org/neon
+# Archive: http://archive.neon.kde.org/user
+# Built from: KDE stable release tarballs
+
+edition: user
+upstream_branch: Neon/release
+ubuntu_series: noble
+neon_archive: http://archive.neon.kde.org/user
+neon_archive_key: 0x45F4C354638D1F29
+
+# Base Ubuntu packages pulled in before Neon overlay
+base_packages:
+  - ubuntu-minimal
+  - ubuntu-standard
+  - casper
+  - lupin-casper
+  - discover
+  - os-prober
+  - grub-common
+  - grub2-common
+  - grub-pc
+  - grub-efi-amd64-signed
+  - shim-signed
+  - plymouth
+  - plymouth-theme-breeze
+
+# KDE Plasma stack (stable releases)
+plasma_packages:
+  - plasma-desktop
+  - plasma-workspace
+  - plasma-nm
+  - plasma-pa
+  - plasma-systemmonitor
+  - plasma-thunderbolt
+  - plasma-vault
+  - plasma-browser-integration
+  - kscreen
+  - kinfocenter
+  - ksystemstats
+  - powerdevil
+  - bluedevil
+  - breeze
+  - breeze-gtk-theme
+  - breeze-plymouth
+  - sddm
+  - sddm-theme-breeze
+  - kde-config-sddm
+
+# KDE Frameworks (pulled as deps, listed for pinning)
+frameworks_pin: ">=5.115"
+
+# KDE Applications
+application_packages:
+  - dolphin
+  - konsole
+  - kate
+  - gwenview
+  - okular
+  - spectacle
+  - ark
+  - kcalc
+  - kwrite
+  - elisa
+  - kmail
+  - kontact
+  - korganizer
+  - kaddressbook
+  - akregator
+  - kdeconnect
+  - filelight
+  - ksystemlog
+  - partitionmanager
+  - plasma-discover
+  - plasma-discover-backend-flatpak
+  - plasma-discover-backend-snap
+
+# Neon-specific metapackages
+neon_packages:
+  - neon-desktop
+  - neon-settings
+  - neon-keyring
+
+# Installer
+installer_packages:
+  - calamares
+  - calamares-settings-neon
+
+# Excluded from ISO (available via archive post-install)
+exclude:
+  - libreoffice*
+  - thunderbird

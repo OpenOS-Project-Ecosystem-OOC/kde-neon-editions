@@ -1,0 +1,79 @@
+# KDE Neon Testing Edition — GitLab CI Pipeline
+# Upstream: invent.kde.org/neon  branch: Neon/release (pre-promotion staging)
+# Archive:  archive.neon.kde.org/testing
+
+include:
+  - project: 'openos-project/kde-ecosystem-deving/kde-groups/neon/ci-templates'
+    ref: main
+    file:
+      - '/iso-build.yml'
+      - '/mirror-sync.yml'
+      - '/manifest-validate.yml'
+
+variables:
+  EDITION: "testing"
+  NEON_BRANCH: "Neon/release"
+  UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+  UPSTREAM_BRANCH: "Neon/release"
+  UBUNTU_SERIES: "noble"
+  NEON_ARCHIVE: "http://archive.neon.kde.org/testing"
+  NEON_ARCHIVE_KEY: "0x45F4C354638D1F29"
+
+stages:
+  - sync
+  - validate
+  - build-iso
+  - test-iso     # boot smoke test in QEMU
+  - publish
+
+sync-upstream:
+  extends: .mirror-sync-base
+  variables:
+    UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+    UPSTREAM_BRANCH: "Neon/release"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+validate-manifest:
+  extends: .manifest-validate-base
+  variables:
+    EDITION: "testing"
+
+build-testing-iso:
+  extends: .iso-build-base
+  variables:
+    EDITION: "testing"
+    NEON_BRANCH: "Neon/release"
+    UBUNTU_SERIES: "noble"
+    NEON_ARCHIVE: "http://archive.neon.kde.org/testing"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      when: manual
+      allow_failure: false
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# Boot the ISO in QEMU headless to verify it reaches the live desktop
+smoke-test-iso:
+  stage: test-iso
+  image: ubuntu:noble
+  needs:
+    - build-testing-iso
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf
+  script:
+    - ./scripts/smoke-test-iso.sh *.iso
+  allow_failure: true   # non-blocking until test suite matures
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+publish-testing-iso:
+  extends: .iso-publish-base
+  needs:
+    - build-testing-iso
+    - smoke-test-iso
+  variables:
+    EDITION: "testing"
+    PUBLISH_PATH: "neon/testing"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"

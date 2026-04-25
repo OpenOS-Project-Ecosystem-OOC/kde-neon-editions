@@ -1,0 +1,152 @@
+# KDE Neon Editions — Root Orchestration Pipeline
+#
+# This pipeline lives in the parent group and triggers all four edition
+# pipelines in parallel. Use it for:
+#   - Nightly scheduled builds of all four ISOs
+#   - Manual "build everything" runs after a major KDE release
+#
+# Each edition repo has its own pipeline for day-to-day work.
+
+stages:
+  - sync-all       # pull latest from invent.kde.org/neon across all editions
+  - build-all      # trigger all four ISO builds in parallel
+  - report         # collect results and post a summary
+
+variables:
+  GITLAB_GROUP: "openos-project/kde-ecosystem-deving/kde-groups/neon"
+
+# ── Upstream sync (all editions) ──────────────────────────────────────────────
+
+.sync-edition: &sync-edition
+  stage: sync-all
+  image: alpine/git:latest
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+
+sync-neon-user:
+  <<: *sync-edition
+  variables:
+    UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+    UPSTREAM_BRANCH: "Neon/release"
+    EDITION: "user"
+  script:
+    - git remote add upstream "${UPSTREAM_REPO_URL}" 2>/dev/null || true
+    - git fetch upstream "${UPSTREAM_BRANCH}" --depth=50
+    - echo "Upstream Neon/release fetched for user edition"
+
+sync-neon-testing:
+  <<: *sync-edition
+  variables:
+    UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+    UPSTREAM_BRANCH: "Neon/release"
+    EDITION: "testing"
+  script:
+    - git remote add upstream "${UPSTREAM_REPO_URL}" 2>/dev/null || true
+    - git fetch upstream "${UPSTREAM_BRANCH}" --depth=50
+    - echo "Upstream Neon/release fetched for testing edition"
+
+sync-neon-developer-stable:
+  <<: *sync-edition
+  variables:
+    UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+    UPSTREAM_BRANCH: "Neon/stable"
+    EDITION: "developer-stable"
+  script:
+    - git remote add upstream "${UPSTREAM_REPO_URL}" 2>/dev/null || true
+    - git fetch upstream "${UPSTREAM_BRANCH}" --depth=50
+    - echo "Upstream Neon/stable fetched for developer-stable edition"
+
+sync-neon-developer-unstable:
+  <<: *sync-edition
+  variables:
+    UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+    UPSTREAM_BRANCH: "Neon/unstable"
+    EDITION: "developer-unstable"
+  script:
+    - git remote add upstream "${UPSTREAM_REPO_URL}" 2>/dev/null || true
+    - git fetch upstream "${UPSTREAM_BRANCH}" --depth=50
+    - echo "Upstream Neon/unstable fetched for developer-unstable edition"
+
+# ── Trigger per-edition pipelines in parallel ─────────────────────────────────
+
+trigger-user-iso:
+  stage: build-all
+  needs:
+    - sync-neon-user
+  trigger:
+    project: "${GITLAB_GROUP}/neon-user"
+    branch: main
+    strategy: depend   # wait for downstream pipeline to finish
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+
+trigger-testing-iso:
+  stage: build-all
+  needs:
+    - sync-neon-testing
+  trigger:
+    project: "${GITLAB_GROUP}/neon-testing"
+    branch: main
+    strategy: depend
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+
+trigger-developer-stable-iso:
+  stage: build-all
+  needs:
+    - sync-neon-developer-stable
+  trigger:
+    project: "${GITLAB_GROUP}/neon-developer-stable"
+    branch: main
+    strategy: depend
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+
+trigger-developer-unstable-iso:
+  stage: build-all
+  needs:
+    - sync-neon-developer-unstable
+  trigger:
+    project: "${GITLAB_GROUP}/neon-developer-unstable"
+    branch: main
+    strategy: depend
+  allow_failure: true   # unstable builds may fail by design
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+
+# ── Build summary ─────────────────────────────────────────────────────────────
+
+build-report:
+  stage: report
+  image: alpine:latest
+  needs:
+    - trigger-user-iso
+    - trigger-testing-iso
+    - trigger-developer-stable-iso
+    - job: trigger-developer-unstable-iso
+      optional: true
+  script:
+    - |
+      echo "========================================"
+      echo "  KDE Neon Edition Build Summary"
+      echo "  $(date -u '+%Y-%m-%d %H:%M UTC')"
+      echo "========================================"
+      echo "  User Edition:              ${TRIGGER_USER_ISO_STATUS:-triggered}"
+      echo "  Testing Edition:           ${TRIGGER_TESTING_ISO_STATUS:-triggered}"
+      echo "  Developer Stable Edition:  ${TRIGGER_DEVELOPER_STABLE_ISO_STATUS:-triggered}"
+      echo "  Developer Unstable Edition:${TRIGGER_DEVELOPER_UNSTABLE_ISO_STATUS:-triggered (may fail)}"
+      echo "========================================"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual

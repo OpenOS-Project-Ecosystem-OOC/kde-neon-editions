@@ -1,0 +1,16 @@
+# Reusable manifest validation template
+# Validates that a package manifest YAML is well-formed and all referenced
+# packages exist in the target apt archive before an ISO build proceeds.
+
+.manifest-validate-base:
+  stage: validate
+  image: ubuntu:noble
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y --no-install-recommends python3 python3-yaml python3-apt curl
+  script:
+    - python3 scripts/validate-manifest.py "manifests/${EDITION}.yaml"
+  rules:
+    - changes:
+        - "manifests/${EDITION}.yaml"
+    - if: $CI_PIPELINE_SOURCE == "schedule"

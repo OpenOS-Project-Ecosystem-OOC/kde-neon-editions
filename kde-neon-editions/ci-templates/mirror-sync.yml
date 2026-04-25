@@ -1,0 +1,16 @@
+# Reusable upstream mirror sync template
+# Syncs from invent.kde.org/neon branches into this repo's tracking branch.
+
+.mirror-sync-base:
+  stage: sync
+  image: alpine/git:latest
+  before_script:
+    - git config --global user.email "neon-mirror-bot@openos-project.gitlab.io"
+    - git config --global user.name "Neon Mirror Bot"
+    - git remote add upstream "${UPSTREAM_REPO_URL}" || true
+  script:
+    - git fetch upstream "${UPSTREAM_BRANCH}"
+    - git checkout -B "upstream/${UPSTREAM_BRANCH}" "FETCH_HEAD"
+    - git push origin "upstream/${UPSTREAM_BRANCH}" --force
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"

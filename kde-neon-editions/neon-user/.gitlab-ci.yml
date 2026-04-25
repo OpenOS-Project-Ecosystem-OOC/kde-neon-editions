@@ -1,0 +1,72 @@
+# KDE Neon User Edition — GitLab CI Pipeline
+# Upstream: invent.kde.org/neon  branch: Neon/release
+# Archive:  archive.neon.kde.org/user
+
+include:
+  - project: 'openos-project/kde-ecosystem-deving/kde-groups/neon/ci-templates'
+    ref: main
+    file:
+      - '/iso-build.yml'
+      - '/mirror-sync.yml'
+      - '/manifest-validate.yml'
+
+variables:
+  EDITION: "user"
+  NEON_BRANCH: "Neon/release"
+  UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+  UPSTREAM_BRANCH: "Neon/release"
+  UBUNTU_SERIES: "noble"
+  NEON_ARCHIVE: "http://archive.neon.kde.org/user"
+  NEON_ARCHIVE_KEY: "0x45F4C354638D1F29"
+
+stages:
+  - sync
+  - validate
+  - build-iso
+  - publish
+
+# ── Upstream sync ────────────────────────────────────────────────────────────
+
+sync-upstream:
+  extends: .mirror-sync-base
+  variables:
+    UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+    UPSTREAM_BRANCH: "Neon/release"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# ── Manifest validation ───────────────────────────────────────────────────────
+
+validate-manifest:
+  extends: .manifest-validate-base
+  variables:
+    EDITION: "user"
+
+# ── ISO build ─────────────────────────────────────────────────────────────────
+
+build-user-iso:
+  extends: .iso-build-base
+  variables:
+    EDITION: "user"
+    NEON_BRANCH: "Neon/release"
+    UBUNTU_SERIES: "noble"
+    NEON_ARCHIVE: "http://archive.neon.kde.org/user"
+  rules:
+    # Build on every push to main (for testing)
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      when: manual
+      allow_failure: false
+    # Build automatically on nightly schedule
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# ── Publish ───────────────────────────────────────────────────────────────────
+
+publish-user-iso:
+  extends: .iso-publish-base
+  needs:
+    - build-user-iso
+  variables:
+    EDITION: "user"
+    PUBLISH_PATH: "neon/user"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"

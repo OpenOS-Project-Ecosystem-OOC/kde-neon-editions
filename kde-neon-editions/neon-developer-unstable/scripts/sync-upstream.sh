@@ -1,0 +1,1 @@
+../../ci-templates/scripts/sync-upstream.sh

@@ -1,0 +1,87 @@
+# KDE Neon Testing Edition — package manifest
+# Tracks: Neon/release branch (staged in testing repo before promotion to user)
+# Archive: http://archive.neon.kde.org/testing
+# Purpose: QA gate between release builds and the User Edition archive
+
+edition: testing
+upstream_branch: Neon/release
+ubuntu_series: noble
+neon_archive: http://archive.neon.kde.org/testing
+neon_archive_key: 0x45F4C354638D1F29
+
+base_packages:
+  - ubuntu-minimal
+  - ubuntu-standard
+  - casper
+  - lupin-casper
+  - discover
+  - os-prober
+  - grub-common
+  - grub2-common
+  - grub-pc
+  - grub-efi-amd64-signed
+  - shim-signed
+  - plymouth
+  - plymouth-theme-breeze
+
+plasma_packages:
+  - plasma-desktop
+  - plasma-workspace
+  - plasma-nm
+  - plasma-pa
+  - plasma-systemmonitor
+  - plasma-thunderbolt
+  - plasma-vault
+  - plasma-browser-integration
+  - kscreen
+  - kinfocenter
+  - ksystemstats
+  - powerdevil
+  - bluedevil
+  - breeze
+  - breeze-gtk-theme
+  - breeze-plymouth
+  - sddm
+  - sddm-theme-breeze
+  - kde-config-sddm
+
+frameworks_pin: ">=5.115"
+
+application_packages:
+  - dolphin
+  - konsole
+  - kate
+  - gwenview
+  - okular
+  - spectacle
+  - ark
+  - kcalc
+  - kwrite
+  - elisa
+  - kdeconnect
+  - filelight
+  - ksystemlog
+  - partitionmanager
+  - plasma-discover
+  - plasma-discover-backend-flatpak
+  - plasma-discover-backend-snap
+
+neon_packages:
+  - neon-desktop
+  - neon-settings
+  - neon-keyring
+
+# Extra QA/debug tooling included in Testing ISO
+testing_extras:
+  - apport
+  - gdb
+  - valgrind
+  - drkonqi
+
+installer_packages:
+  - calamares
+  - calamares-settings-neon
+
+exclude:
+  - libreoffice*
+  - thunderbird

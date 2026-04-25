@@ -1,0 +1,112 @@
+# KDE Neon Developer Edition (Stable) — package manifest
+# Tracks: Neon/stable branch on invent.kde.org/neon
+# Archive: http://archive.neon.kde.org/dev/stable
+# Built from: KDE stable + beta branch tarballs (defined in overrides/base.yaml upstream)
+
+edition: developer-stable
+upstream_branch: Neon/stable
+ubuntu_series: noble
+neon_archive: http://archive.neon.kde.org/dev/stable
+neon_archive_key: 0x45F4C354638D1F29
+
+base_packages:
+  - ubuntu-minimal
+  - ubuntu-standard
+  - casper
+  - lupin-casper
+  - discover
+  - os-prober
+  - grub-common
+  - grub2-common
+  - grub-pc
+  - grub-efi-amd64-signed
+  - shim-signed
+  - plymouth
+  - plymouth-theme-breeze
+
+plasma_packages:
+  - plasma-desktop
+  - plasma-workspace
+  - plasma-nm
+  - plasma-pa
+  - plasma-systemmonitor
+  - plasma-thunderbolt
+  - plasma-vault
+  - plasma-browser-integration
+  - kscreen
+  - kinfocenter
+  - ksystemstats
+  - powerdevil
+  - bluedevil
+  - breeze
+  - breeze-gtk-theme
+  - breeze-plymouth
+  - sddm
+  - sddm-theme-breeze
+  - kde-config-sddm
+
+# No frameworks pin — tracks latest stable branch builds
+frameworks_pin: null
+
+application_packages:
+  - dolphin
+  - konsole
+  - kate
+  - gwenview
+  - okular
+  - spectacle
+  - ark
+  - kcalc
+  - kwrite
+  - elisa
+  - kdeconnect
+  - filelight
+  - ksystemlog
+  - partitionmanager
+  - plasma-discover
+  - plasma-discover-backend-flatpak
+  - plasma-discover-backend-snap
+
+neon_packages:
+  - neon-desktop
+  - neon-settings
+  - neon-keyring
+
+# Developer tooling included in this edition
+developer_extras:
+  - build-essential
+  - cmake
+  - extra-cmake-modules
+  - ninja-build
+  - clang
+  - clang-format
+  - clang-tidy
+  - gdb
+  - valgrind
+  - heaptrack
+  - hotspot
+  - kdevelop
+  - umbrello
+  - git
+  - git-cola
+  - gitk
+  - flatpak
+  - flatpak-builder
+  - appstream-util
+  - lintian
+  - debhelper
+  - devscripts
+  - dput
+  - pbuilder
+  - sbuild
+  - quilt
+  - python3-pip
+  - python3-venv
+  - drkonqi
+  - apport
+
+installer_packages:
+  - calamares
+  - calamares-settings-neon
+
+exclude: []
