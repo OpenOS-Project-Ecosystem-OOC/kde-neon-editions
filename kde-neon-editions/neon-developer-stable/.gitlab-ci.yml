@@ -1,5 +1,5 @@
 # KDE Neon Developer Edition (Stable) — GitLab CI Pipeline
-# Upstream: invent.kde.org/neon  branch: Neon/stable
+# Upstream: gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon  branch: Neon/stable
 # Archive:  archive.neon.kde.org/dev/stable
 
 include:
@@ -13,7 +13,7 @@ include:
 variables:
   EDITION: "developer-stable"
   NEON_BRANCH: "Neon/stable"
-  UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+  UPSTREAM_REPO_URL: "https://gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon/neon/seeds.git"
   UPSTREAM_BRANCH: "Neon/stable"
   UBUNTU_SERIES: "noble"
   NEON_ARCHIVE: "http://archive.neon.kde.org/dev/stable"
@@ -28,7 +28,7 @@ stages:
 sync-upstream:
   extends: .mirror-sync-base
   variables:
-    UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+    UPSTREAM_REPO_URL: "https://gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon/neon/seeds.git"
     UPSTREAM_BRANCH: "Neon/stable"
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"

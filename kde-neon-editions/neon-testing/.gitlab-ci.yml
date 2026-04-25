@@ -1,5 +1,5 @@
 # KDE Neon Testing Edition — GitLab CI Pipeline
-# Upstream: invent.kde.org/neon  branch: Neon/release (pre-promotion staging)
+# Upstream: gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon  branch: Neon/release (pre-promotion staging)
 # Archive:  archive.neon.kde.org/testing
 
 include:
@@ -13,7 +13,7 @@ include:
 variables:
   EDITION: "testing"
   NEON_BRANCH: "Neon/release"
-  UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+  UPSTREAM_REPO_URL: "https://gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon/neon/seeds.git"
   UPSTREAM_BRANCH: "Neon/release"
   UBUNTU_SERIES: "noble"
   NEON_ARCHIVE: "http://archive.neon.kde.org/testing"
@@ -29,7 +29,7 @@ stages:
 sync-upstream:
   extends: .mirror-sync-base
   variables:
-    UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+    UPSTREAM_REPO_URL: "https://gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon/neon/seeds.git"
     UPSTREAM_BRANCH: "Neon/release"
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"

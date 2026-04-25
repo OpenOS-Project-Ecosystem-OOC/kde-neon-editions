@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # build-iso.sh — build a KDE Neon edition ISO using live-build.
 #
-# Reads configuration from the edition's manifest YAML and constructs
-# a live-build config directory, then runs lb build.
+# Clones seeds, livecd-rootfs, calamares-settings, and settings from the
+# internal GitLab mirror at kde-groups/neon, then runs lb build.
 #
 # Required environment variables (set in .gitlab-ci.yml):
 #   EDITION         — user | testing | developer-stable | developer-unstable
 #   NEON_ARCHIVE    — e.g. http://archive.neon.kde.org/user
 #   UBUNTU_SERIES   — e.g. noble
+#   NEON_BRANCH     — e.g. Neon/release
 #   NEON_ARCHIVE_KEY — GPG key fingerprint for the Neon archive
+#
+# GitLab CI provides automatically:
+#   CI_JOB_TOKEN    — used to clone internal repos without a PAT
+#   CI_SERVER_HOST  — e.g. gitlab.com
 #
 # Optional:
 #   BUILD_DIR       — working directory for live-build (default: ./build)
@@ -18,16 +23,55 @@ set -euo pipefail
 : "${EDITION:?EDITION must be set}"
 : "${NEON_ARCHIVE:?NEON_ARCHIVE must be set}"
 : "${UBUNTU_SERIES:?UBUNTU_SERIES must be set}"
+: "${NEON_BRANCH:?NEON_BRANCH must be set}"
 
 BUILD_DIR="${BUILD_DIR:-./build}"
 ISO_NAME="${ISO_NAME:-kde-neon-${EDITION}}"
 MANIFEST="manifests/${EDITION}.yaml"
-SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Internal GitLab group — read from manifest, with fallback
+INTERNAL_GROUP=$(python3 -c "
+import yaml, sys
+m = yaml.safe_load(open('${MANIFEST}'))
+print(m.get('source_group', 'openos-project/kde-ecosystem-deving/kde-groups/neon/neon'))
+")
+CI_SERVER_HOST="${CI_SERVER_HOST:-gitlab.com}"
+
+# Clone helper — uses CI_JOB_TOKEN for auth inside pipelines,
+# falls back to unauthenticated for local runs
+clone_internal() {
+  local REPO="$1"
+  local BRANCH="$2"
+  local DEST="$3"
+
+  local URL
+  if [[ -n "${CI_JOB_TOKEN:-}" ]]; then
+    URL="https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${INTERNAL_GROUP}/${REPO}.git"
+  else
+    URL="https://${CI_SERVER_HOST}/${INTERNAL_GROUP}/${REPO}.git"
+  fi
+
+  echo "==> Cloning ${REPO} (${BRANCH}) -> ${DEST}"
+  git clone --depth=1 --branch "${BRANCH}" "${URL}" "${DEST}"
+}
 
 echo "==> Building KDE Neon ${EDITION} ISO"
 echo "    Archive:  ${NEON_ARCHIVE}"
 echo "    Series:   ${UBUNTU_SERIES}"
+echo "    Branch:   ${NEON_BRANCH}"
 echo "    Manifest: ${MANIFEST}"
+
+# ── Clone internal source repos ───────────────────────────────────────────────
+
+WORK_DIR="$(mktemp -d /tmp/neon-build-XXXXXX)"
+trap "rm -rf ${WORK_DIR}" EXIT
+
+clone_internal "seeds"              "${NEON_BRANCH}" "${WORK_DIR}/seeds"
+clone_internal "livecd-rootfs"      "${NEON_BRANCH}" "${WORK_DIR}/livecd-rootfs"
+clone_internal "calamares-settings" "${NEON_BRANCH}" "${WORK_DIR}/calamares-settings"
+clone_internal "settings"           "${NEON_BRANCH}" "${WORK_DIR}/settings"
+
+echo "==> Source repos cloned to ${WORK_DIR}"
 
 # ── Parse manifest ────────────────────────────────────────────────────────────
 
@@ -99,19 +143,60 @@ EOF
 cp /etc/apt/trusted.gpg.d/neon-archive.gpg config/archives/neon.key.binary
 cp /etc/apt/trusted.gpg.d/neon-archive.gpg config/archives/neon.key.chroot
 
-# ── Package list ──────────────────────────────────────────────────────────────
+# ── Seeds → package list ──────────────────────────────────────────────────────
 
-echo "==> Writing package list"
+echo "==> Installing seeds from internal repo"
 mkdir -p config/package-lists
+
+# Seeds format: lines starting with ' * ' are package entries
+SEED_FILE="${WORK_DIR}/seeds/neon-desktop"
+if [[ -f "${SEED_FILE}" ]]; then
+  echo "    Using seeds/neon-desktop"
+  grep '^ \* ' "${SEED_FILE}" | sed 's/^ \* //' | cut -d' ' -f1 \
+    > config/package-lists/neon-seeds.list.chroot
+fi
+
+# Append manifest packages (covers edition-specific extras not in seeds)
 echo "${ALL_PACKAGES}" | tr ' ' '\n' | grep -v '^$' | sort -u \
-  > config/package-lists/neon-${EDITION}.list.chroot
+  >> config/package-lists/neon-${EDITION}.list.chroot
 
-# ── Hooks ─────────────────────────────────────────────────────────────────────
+# ── livecd-rootfs hooks ───────────────────────────────────────────────────────
 
-echo "==> Installing build hooks"
+echo "==> Installing livecd-rootfs hooks"
+LIVECD_HOOKS="${WORK_DIR}/livecd-rootfs/live-build/ubuntu-core"
+if [[ -d "${LIVECD_HOOKS}" ]]; then
+  cp -r "${LIVECD_HOOKS}/." config/hooks/live/ 2>/dev/null || true
+  echo "    Copied livecd-rootfs ubuntu-core hooks"
+fi
+
+# ── calamares-settings ────────────────────────────────────────────────────────
+
+echo "==> Installing calamares-settings"
+CALAMARES_SRC="${WORK_DIR}/calamares-settings"
+if [[ -d "${CALAMARES_SRC}" ]]; then
+  mkdir -p config/includes.chroot/etc/calamares
+  cp -r "${CALAMARES_SRC}/." config/includes.chroot/etc/calamares/ 2>/dev/null || true
+  echo "    Copied calamares-settings"
+fi
+
+# ── neon-settings ─────────────────────────────────────────────────────────────
+
+echo "==> Installing neon-settings"
+SETTINGS_SRC="${WORK_DIR}/settings"
+if [[ -d "${SETTINGS_SRC}" ]]; then
+  for DIR in etc usr; do
+    if [[ -d "${SETTINGS_SRC}/${DIR}" ]]; then
+      mkdir -p "config/includes.chroot/${DIR}"
+      cp -r "${SETTINGS_SRC}/${DIR}/." "config/includes.chroot/${DIR}/" 2>/dev/null || true
+    fi
+  done
+  echo "    Copied neon-settings overlays"
+fi
+
+# ── Additional hooks ──────────────────────────────────────────────────────────
+
 mkdir -p config/hooks/live
 
-# Set lsb-release for the edition
 cat > config/hooks/live/0010-lsb-release.hook.chroot <<HOOK
 #!/bin/sh
 set -e
@@ -123,14 +208,12 @@ DISTRIB_DESCRIPTION="KDE neon ${EDITION}"
 LSB
 HOOK
 
-# Enable SDDM
 cat > config/hooks/live/0020-enable-sddm.hook.chroot <<HOOK
 #!/bin/sh
 set -e
 systemctl enable sddm || true
 HOOK
 
-# Set default session
 cat > config/hooks/live/0030-default-session.hook.chroot <<HOOK
 #!/bin/sh
 set -e
@@ -142,7 +225,7 @@ SystemAccount=false
 SESSION
 HOOK
 
-chmod +x config/hooks/live/*.hook.chroot
+chmod +x config/hooks/live/*.hook.chroot 2>/dev/null || true
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 

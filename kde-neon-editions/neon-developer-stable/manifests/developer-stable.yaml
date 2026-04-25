@@ -1,5 +1,5 @@
 # KDE Neon Developer Edition (Stable) — package manifest
-# Tracks: Neon/stable branch on invent.kde.org/neon
+# Tracks: Neon/stable branch on gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon
 # Archive: http://archive.neon.kde.org/dev/stable
 # Built from: KDE stable + beta branch tarballs (defined in overrides/base.yaml upstream)
 
@@ -8,6 +8,7 @@ upstream_branch: Neon/stable
 ubuntu_series: noble
 neon_archive: http://archive.neon.kde.org/dev/stable
 neon_archive_key: 0x45F4C354638D1F29
+source_group: openos-project/kde-ecosystem-deving/kde-groups/neon/neon
 
 base_packages:
   - ubuntu-minimal

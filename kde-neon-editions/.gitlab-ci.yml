@@ -8,7 +8,7 @@
 # Each edition repo has its own pipeline for day-to-day work.
 
 stages:
-  - sync-all       # pull latest from invent.kde.org/neon across all editions
+  - sync-all       # pull latest from gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon across all editions
   - build-all      # trigger all four ISO builds in parallel
   - report         # collect results and post a summary
 
@@ -28,7 +28,7 @@ variables:
 sync-neon-user:
   <<: *sync-edition
   variables:
-    UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+    UPSTREAM_REPO_URL: "https://gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon/neon/seeds.git"
     UPSTREAM_BRANCH: "Neon/release"
     EDITION: "user"
   script:
@@ -39,7 +39,7 @@ sync-neon-user:
 sync-neon-testing:
   <<: *sync-edition
   variables:
-    UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+    UPSTREAM_REPO_URL: "https://gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon/neon/seeds.git"
     UPSTREAM_BRANCH: "Neon/release"
     EDITION: "testing"
   script:
@@ -50,7 +50,7 @@ sync-neon-testing:
 sync-neon-developer-stable:
   <<: *sync-edition
   variables:
-    UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+    UPSTREAM_REPO_URL: "https://gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon/neon/seeds.git"
     UPSTREAM_BRANCH: "Neon/stable"
     EDITION: "developer-stable"
   script:
@@ -61,7 +61,7 @@ sync-neon-developer-stable:
 sync-neon-developer-unstable:
   <<: *sync-edition
   variables:
-    UPSTREAM_REPO_URL: "https://invent.kde.org/neon/neon/seeds.git"
+    UPSTREAM_REPO_URL: "https://gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon/neon/seeds.git"
     UPSTREAM_BRANCH: "Neon/unstable"
     EDITION: "developer-unstable"
   script:

@@ -8,6 +8,7 @@ upstream_branch: Neon/release
 ubuntu_series: noble
 neon_archive: http://archive.neon.kde.org/testing
 neon_archive_key: 0x45F4C354638D1F29
+source_group: openos-project/kde-ecosystem-deving/kde-groups/neon/neon
 
 base_packages:
   - ubuntu-minimal

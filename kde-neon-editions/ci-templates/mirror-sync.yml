@@ -1,5 +1,5 @@
 # Reusable upstream mirror sync template
-# Syncs from invent.kde.org/neon branches into this repo's tracking branch.
+# Syncs from gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon branches into this repo's tracking branch.
 
 .mirror-sync-base:
   stage: sync

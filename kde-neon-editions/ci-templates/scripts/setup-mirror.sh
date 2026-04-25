@@ -2,11 +2,16 @@
 # setup-mirror.sh — configure GitLab pull mirroring for all four edition repos
 # via the GitLab API.
 #
-# Run this once after creating the repos on gitlab.com.
+# Source group: gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon
+# Each edition repo mirrors the seeds repo on its corresponding Neon branch.
+# The build pipeline additionally clones livecd-rootfs, calamares-settings,
+# and settings at build time using CI_JOB_TOKEN.
+#
+# Run this once after creating the edition repos on GitLab.
 #
 # Required:
 #   GITLAB_TOKEN        — personal access token with api scope
-#   GITLAB_GROUP        — e.g. openos-project/kde-ecosystem-deving/kde-groups/neon
+#   GITLAB_GROUP        — target group, e.g. openos-project/kde-ecosystem-deving/neon-deving
 #
 # Optional:
 #   GITLAB_API_URL      — defaults to https://gitlab.com/api/v4
@@ -16,13 +21,14 @@ set -euo pipefail
 : "${GITLAB_GROUP:?GITLAB_GROUP must be set}"
 
 GITLAB_API_URL="${GITLAB_API_URL:-https://gitlab.com/api/v4}"
+INTERNAL_BASE="https://gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon/neon"
 
-# Map: local repo slug → upstream invent.kde.org repo URL + branch
+# Map: edition repo slug → source repo URL in kde-groups/neon + branch
 declare -A REPOS=(
-  ["neon-user"]="https://invent.kde.org/neon/neon/seeds.git|Neon/release"
-  ["neon-testing"]="https://invent.kde.org/neon/neon/seeds.git|Neon/release"
-  ["neon-developer-stable"]="https://invent.kde.org/neon/neon/seeds.git|Neon/stable"
-  ["neon-developer-unstable"]="https://invent.kde.org/neon/neon/seeds.git|Neon/unstable"
+  ["neon-user"]="${INTERNAL_BASE}/seeds.git|Neon/release"
+  ["neon-testing"]="${INTERNAL_BASE}/seeds.git|Neon/release"
+  ["neon-developer-stable"]="${INTERNAL_BASE}/seeds.git|Neon/stable"
+  ["neon-developer-unstable"]="${INTERNAL_BASE}/seeds.git|Neon/unstable"
 )
 
 api() {
@@ -33,7 +39,6 @@ api() {
 }
 
 encode_path() {
-  # URL-encode a project path for GitLab API
   python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
 }
 
@@ -43,9 +48,8 @@ for REPO_SLUG in "${!REPOS[@]}"; do
   ENCODED_PATH=$(encode_path "${PROJECT_PATH}")
 
   echo "==> Configuring mirror for: ${PROJECT_PATH}"
-  echo "    Upstream: ${UPSTREAM_URL} (${UPSTREAM_BRANCH})"
+  echo "    Source: ${UPSTREAM_URL} (${UPSTREAM_BRANCH})"
 
-  # Enable pull mirroring on the project
   api --request PUT \
     "${GITLAB_API_URL}/projects/${ENCODED_PATH}" \
     --data "{
@@ -59,12 +63,12 @@ d = json.load(sys.stdin)
 print(f'    Mirror enabled: {d.get(\"mirror\", False)}')
 print(f'    Import URL:     {d.get(\"import_url\", \"(not set)\")}')
 "
-
   echo "    Done."
 done
 
 echo ""
 echo "Mirror configuration complete."
-echo "GitLab will sync from invent.kde.org on its default schedule (every 30 min)."
+echo "GitLab will sync from kde-groups/neon on its default schedule (every 30 min)."
 echo "To trigger an immediate sync, use:"
 echo "  POST ${GITLAB_API_URL}/projects/<id>/mirror/pull"
+echo "  or run: bash trigger-mirror-sync.sh"

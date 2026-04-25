@@ -1,5 +1,5 @@
 # KDE Neon Developer Edition (Unstable) — package manifest
-# Tracks: Neon/unstable branch on invent.kde.org/neon
+# Tracks: Neon/unstable branch on gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon
 # Archive: http://archive.neon.kde.org/dev/unstable
 # Built from: KDE master branch (git HEAD) — may be broken at any time
 
@@ -8,6 +8,7 @@ upstream_branch: Neon/unstable
 ubuntu_series: noble
 neon_archive: http://archive.neon.kde.org/dev/unstable
 neon_archive_key: 0x45F4C354638D1F29
+source_group: openos-project/kde-ecosystem-deving/kde-groups/neon/neon
 
 # Warning surfaced in ISO boot menu and installer
 edition_warning: >
