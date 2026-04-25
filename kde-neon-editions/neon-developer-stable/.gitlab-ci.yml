@@ -3,12 +3,13 @@
 # Archive:  archive.neon.kde.org/dev/stable
 
 include:
-  - project: 'openos-project/kde-ecosystem-deving/kde-groups/neon/ci-templates'
+  - project: 'openos-project/kde-ecosystem-deving/neon-deving/kde-neon-editions'
     ref: main
     file:
-      - '/iso-build.yml'
-      - '/mirror-sync.yml'
-      - '/manifest-validate.yml'
+      - '/kde-neon-editions/ci-templates/iso-build.yml'
+      - '/kde-neon-editions/ci-templates/mirror-sync.yml'
+      - '/kde-neon-editions/ci-templates/manifest-validate.yml'
+      - '/kde-neon-editions/ci-templates/lint.yml'
 
 variables:
   EDITION: "developer-stable"
@@ -20,10 +21,24 @@ variables:
   NEON_ARCHIVE_KEY: "0x45F4C354638D1F29"
 
 stages:
+  - lint
   - sync
   - validate
   - build-iso
   - publish
+
+# ── Lint ─────────────────────────────────────────────────────────────────────
+
+lint-manifest:
+  extends: .lint-manifest-base
+  variables:
+    EDITION: "developer-stable"
+
+lint-shellcheck:
+  extends: .lint-shellcheck-base
+
+lint-ci-yaml:
+  extends: .lint-ci-yaml-base
 
 sync-upstream:
   extends: .mirror-sync-base

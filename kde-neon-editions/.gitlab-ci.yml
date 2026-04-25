@@ -8,12 +8,86 @@
 # Each edition repo has its own pipeline for day-to-day work.
 
 stages:
-  - sync-all       # pull latest from gitlab.com/openos-project/kde-ecosystem-deving/kde-groups/neon across all editions
+  - lint           # manifest validation, shellcheck, CI YAML syntax
+  - sync-all       # pull latest from kde-groups/neon across all editions
   - build-all      # trigger all four ISO builds in parallel
   - report         # collect results and post a summary
 
 variables:
-  GITLAB_GROUP: "openos-project/kde-ecosystem-deving/kde-groups/neon"
+  GITLAB_GROUP: "openos-project/kde-ecosystem-deving/neon-deving"
+
+# ── Lint ──────────────────────────────────────────────────────────────────────
+
+lint-manifests:
+  stage: lint
+  image: python:3.12-slim
+  before_script:
+    - pip install pyyaml --quiet
+  script:
+    - |
+      ERRORS=0
+      for EDITION_DIR in kde-neon-editions/neon-user kde-neon-editions/neon-testing kde-neon-editions/neon-developer-stable kde-neon-editions/neon-developer-unstable; do
+        MANIFEST=$(ls ${EDITION_DIR}/manifests/*.yaml | head -1)
+        echo "==> Validating ${MANIFEST}"
+        python3 kde-neon-editions/ci-templates/scripts/validate-manifest.py "${MANIFEST}" || ERRORS=$((ERRORS+1))
+      done
+      exit ${ERRORS}
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+lint-shellcheck:
+  stage: lint
+  image: koalaman/shellcheck-alpine:stable
+  script:
+    - |
+      echo "==> Running shellcheck on ci-templates/scripts/"
+      ERRORS=0
+      find kde-neon-editions/ci-templates/scripts -name "*.sh" ! -type l | sort | while read -r SCRIPT; do
+        echo "    ${SCRIPT}"
+        shellcheck --severity=warning --shell=bash "${SCRIPT}" || ERRORS=$((ERRORS+1))
+      done
+      exit ${ERRORS}
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+lint-ci-yaml:
+  stage: lint
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl python3
+  script:
+    - |
+      echo "==> Linting all .gitlab-ci.yml files via GitLab API"
+      ERRORS=0
+      for CI_FILE in \
+        kde-neon-editions/.gitlab-ci.yml \
+        kde-neon-editions/neon-user/.gitlab-ci.yml \
+        kde-neon-editions/neon-testing/.gitlab-ci.yml \
+        kde-neon-editions/neon-developer-stable/.gitlab-ci.yml \
+        kde-neon-editions/neon-developer-unstable/.gitlab-ci.yml; do
+        echo "--- ${CI_FILE} ---"
+        RESPONSE=$(curl -s \
+          --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+          --header "Content-Type: application/json" \
+          --request POST \
+          "${CI_API_V4_URL}/ci/lint" \
+          --data "{\"content\": $(python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' < "${CI_FILE}")}")
+        STATUS=$(echo "${RESPONSE}" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+        if [ "${STATUS}" = "valid" ]; then
+          echo "    valid"
+        else
+          echo "    INVALID: $(echo "${RESPONSE}" | grep -o '"errors":\[[^]]*\]')"
+          ERRORS=$((ERRORS+1))
+        fi
+      done
+      exit ${ERRORS}
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push"
 
 # ── Upstream sync (all editions) ──────────────────────────────────────────────
 

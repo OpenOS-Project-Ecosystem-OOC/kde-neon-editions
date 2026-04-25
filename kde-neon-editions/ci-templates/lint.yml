@@ -1,0 +1,66 @@
+# Reusable lint job templates
+# Include this in any edition repo with:
+#   include:
+#     - project: 'openos-project/kde-ecosystem-deving/neon-deving/ci-templates'
+#       file: '/lint.yml'
+
+# ── Manifest validation ───────────────────────────────────────────────────────
+
+.lint-manifest-base:
+  stage: lint
+  image: python:3.12-slim
+  before_script:
+    - pip install pyyaml --quiet
+  script:
+    - python3 scripts/validate-manifest.py "manifests/${EDITION}.yaml"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# ── Shell script linting ──────────────────────────────────────────────────────
+
+.lint-shellcheck-base:
+  stage: lint
+  image: koalaman/shellcheck-alpine:stable
+  script:
+    - |
+      echo "==> Running shellcheck on all scripts"
+      find scripts/ -name "*.sh" ! -type l | sort | while read -r SCRIPT; do
+        echo "    Checking: ${SCRIPT}"
+        shellcheck --severity=warning --shell=bash "${SCRIPT}"
+      done
+      echo "==> shellcheck passed"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# ── GitLab CI YAML lint ───────────────────────────────────────────────────────
+
+.lint-ci-yaml-base:
+  stage: lint
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - |
+      echo "==> Linting .gitlab-ci.yml via GitLab API"
+      CONTENT=$(cat .gitlab-ci.yml)
+      RESPONSE=$(curl -s \
+        --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+        --header "Content-Type: application/json" \
+        --request POST \
+        "${CI_API_V4_URL}/ci/lint" \
+        --data "{\"content\": $(echo "${CONTENT}" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}")
+      STATUS=$(echo "${RESPONSE}" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
+      if [ "${STATUS}" = "valid" ]; then
+        echo "    .gitlab-ci.yml is valid"
+      else
+        echo "    Errors:"
+        echo "${RESPONSE}" | grep -o '"errors":\[[^]]*\]' || echo "${RESPONSE}"
+        exit 1
+      fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push"
