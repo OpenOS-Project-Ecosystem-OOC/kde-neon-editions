@@ -1,128 +1,214 @@
-# ISO Builder Runner Setup
+# ISO Builder — Plug-and-Play Setup
 
-ISO builds use `live-build`, which requires loop devices and chroot. This
-means builds must run inside a VM (not a container). The recommended approach
-is the `garm-gitlab` runner manager, which provisions Incus VMs on demand.
-
-## Option A — garm-gitlab (recommended)
-
-`garm-gitlab` manages a pool of Incus VMs that register as GitLab runners,
-run one job each, then are destroyed. This gives clean build environments
-and automatic scaling.
-
-### Prerequisites
-
-- An Incus host with KVM support (`incus info | grep -i kvm`)
-- `garm-gitlab` installed and configured (see `ci/runners/garm-gitlab/deploy/SETUP.md`
-  in the `gitlab-enhanced` repo)
-- Ubuntu Noble base image in Incus: `incus image copy images:ubuntu/24.04 local:`
-
-### 1. Create the Incus profile
-
-```bash
-incus profile create iso-builder
-incus profile edit iso-builder < deploy/incus-profile-iso-builder.yaml
-```
-
-Verify:
-
-```bash
-incus profile show iso-builder
-```
-
-### 2. Register the pool with garm-gitlab
-
-```bash
-export GARM_GITLAB_TOKEN="<your-gitlab-token>"
-export GARM_GITLAB_GROUP="openos-project/kde-ecosystem-deving/neon-deving"
-
-garm-gitlab pool create --config deploy/garm-pool-iso-builder.yaml
-```
-
-This creates a pool named `neon-iso-builders` that:
-- Keeps 1 warm VM idle (fast job start)
-- Scales up to 4 concurrent VMs
-- Tags runners `privileged` + `iso-builder` + `neon`
-- Destroys each VM after its job completes
-
-### 3. Verify runners appear in GitLab
-
-```
-https://gitlab.com/groups/openos-project/kde-ecosystem-deving/neon-deving/-/runners
-```
-
-You should see runners with tags `privileged, iso-builder, neon` come online
-within ~2 minutes of the pool starting.
+ISO builds use `live-build`, which requires loop devices and chroot inside a
+VM. Pick whichever path fits your situation — all three produce the same
+`.iso` + `.iso.sha256` artifact.
 
 ---
 
-## Option B — Static self-hosted runner (simpler, no auto-scaling)
+## Quick-start decision tree
 
-If you have a single dedicated build machine and don't need auto-scaling,
-register a runner directly.
+```
+Do you want CI/CD builds (automated, nightly)?
+├── Yes → Do you have a machine available?
+│         ├── Yes (Linux VM or bare metal) → Path A: register-runner.sh
+│         └── No                           → Path B: Terraform (spin one up)
+└── No  → Path C: local-build.sh (build on your laptop/workstation)
+```
 
-### Prerequisites
+---
 
-- Ubuntu Noble host with KVM
-- `gitlab-runner` installed: https://docs.gitlab.com/runner/install/linux-repository.html
-- Sufficient disk: 40 GB free per concurrent build
+## Path A — Register any Linux machine as a runner
 
-### 1. Install live-build dependencies
+One script. Works on Ubuntu, Debian, Fedora, RHEL, Arch, and derivatives.
+Detects the OS, installs `live-build` and `gitlab-runner`, configures sudo,
+and registers the runner — no manual steps.
+
+### 1. Get a runner token
+
+Go to:
+```
+https://gitlab.com/groups/openos-project/kde-ecosystem-deving/neon-deving/-/runners/new
+```
+Copy the token (starts with `glrt-`).
+
+### 2. Run the script
+
+**One-liner (no clone needed):**
+```bash
+curl -fsSL \
+  https://gitlab.com/openos-project/kde-ecosystem-deving/neon-deving/kde-neon-editions/-/raw/main/deploy/register-runner.sh \
+  | GITLAB_RUNNER_TOKEN="glrt-YOUR-TOKEN-HERE" sh
+```
+
+**Or from a local clone:**
+```bash
+GITLAB_RUNNER_TOKEN="glrt-YOUR-TOKEN-HERE" bash deploy/register-runner.sh
+```
+
+**Optional environment variables:**
+| Variable | Default | Description |
+|---|---|---|
+| `RUNNER_NAME` | `hostname-iso-builder` | Name shown in GitLab UI |
+| `RUNNER_CONCURRENT` | `1` | Concurrent builds (increase if disk ≥ 80 GB) |
+| `RUNNER_TAGS` | `privileged,iso-builder,neon` | GitLab runner tags |
+| `SKIP_DEPS` | `0` | Set `1` to skip package installation |
+| `SKIP_REGISTER` | `0` | Set `1` to only install deps |
+
+### Minimum machine requirements
+
+| Resource | Minimum | Recommended |
+|---|---|---|
+| CPU | 2 vCPU | 4 vCPU |
+| RAM | 6 GB | 8 GB |
+| Disk | 40 GB free | 80 GB (for 2 concurrent builds) |
+| OS | Ubuntu 22.04+ / Debian 12+ | Ubuntu 24.04 Noble |
+| KVM | Optional (faster) | Recommended |
+
+### 3. Verify
+
+The runner appears at:
+```
+https://gitlab.com/groups/openos-project/kde-ecosystem-deving/neon-deving/-/runners
+```
+Status should be `online` within ~30 seconds.
+
+---
+
+## Path B — Provision a cloud VM with Terraform
+
+No machine? Terraform provisions one on Hetzner, DigitalOcean, or AWS,
+injects cloud-init, and the VM registers itself as a runner on first boot.
+
+### 1. Get a runner token (same as Path A step 1)
+
+### 2. Choose a provider and copy its `.tfvars`
 
 ```bash
-apt-get install -y \
-  live-build ubuntu-defaults-builder debootstrap squashfs-tools \
-  xorriso isolinux syslinux-common grub-efi-amd64-bin grub-pc-bin \
-  mtools dosfstools rsync wget curl gpg ca-certificates python3 python3-yaml git
+# Hetzner (~€8/mo for cx32 — recommended for cost)
+cp deploy/terraform/providers/hetzner.tfvars deploy/terraform/terraform.tfvars
+
+# DigitalOcean (~$48/mo for s-4vcpu-8gb)
+cp deploy/terraform/providers/digitalocean.tfvars deploy/terraform/terraform.tfvars
+
+# AWS (~$0.17/hr for t3.xlarge on-demand, cheaper on spot)
+cp deploy/terraform/providers/aws.tfvars deploy/terraform/terraform.tfvars
 ```
 
-### 2. Register the runner
+### 3. Fill in the two required tokens
+
+Edit `deploy/terraform/terraform.tfvars`:
+```hcl
+gitlab_runner_token = "glrt-YOUR-TOKEN-HERE"
+hetzner_token       = "YOUR-HETZNER-API-TOKEN"   # or digitalocean_token / aws_access_key+secret_key
+```
+
+### 4. Apply
 
 ```bash
-gitlab-runner register \
-  --non-interactive \
-  --url "https://gitlab.com" \
-  --token "<group-runner-token>" \
-  --executor "shell" \
-  --description "neon-iso-builder-static" \
-  --tag-list "privileged,iso-builder,neon" \
-  --run-untagged false \
-  --locked false
+terraform -chdir=deploy/terraform init
+terraform -chdir=deploy/terraform apply
 ```
 
-Get the group runner token from:
-`https://gitlab.com/groups/openos-project/kde-ecosystem-deving/neon-deving/-/runners/new`
+Terraform outputs the VM IP and a link to verify the runner in GitLab.
+The runner comes online within ~5 minutes of `apply` completing.
 
-### 3. Configure concurrent builds
-
-Edit `/etc/gitlab-runner/config.toml`:
-
-```toml
-concurrent = 2   # adjust to available disk/CPU
-
-[[runners]]
-  name = "neon-iso-builder-static"
-  executor = "shell"
-  # shell executor runs as gitlab-runner user — ensure it has sudo for live-build
-```
-
-Grant `live-build` sudo access without password:
+### 5. Tear down when not needed
 
 ```bash
-echo "gitlab-runner ALL=(ALL) NOPASSWD: /usr/bin/lb, /usr/sbin/debootstrap" \
-  >> /etc/sudoers.d/gitlab-runner-lb
-chmod 440 /etc/sudoers.d/gitlab-runner-lb
+terraform -chdir=deploy/terraform destroy
 ```
+
+No idle cost — spin up for a build run, destroy after.
+
+### Provider comparison
+
+| Provider | Instance | vCPU | RAM | Cost | Notes |
+|---|---|---|---|---|---|
+| Hetzner | cx32 | 4 | 8 GB | ~€8/mo | Best value, EU datacentres |
+| Hetzner | cx42 | 8 | 16 GB | ~€14/mo | For concurrent builds |
+| DigitalOcean | s-4vcpu-8gb | 4 | 8 GB | ~$48/mo | Simple API |
+| AWS | t3.xlarge | 4 | 16 GB | ~$0.17/hr | Spot ~$0.05/hr |
+| AWS | t3.2xlarge | 8 | 32 GB | ~$0.33/hr | Spot ~$0.10/hr |
+
+---
+
+## Path C — Build locally (no runner, no cloud account)
+
+Build an ISO directly on your workstation or laptop. No GitLab runner needed.
+The script auto-detects whether native `live-build` is available and falls
+back to Docker/Podman if not.
+
+### Usage
+
+```bash
+# Clone the repo
+git clone https://gitlab.com/openos-project/kde-ecosystem-deving/neon-deving/kde-neon-editions.git
+cd kde-neon-editions
+
+# Build the User Edition (auto-detects native vs Docker)
+bash deploy/local-build.sh --edition user
+
+# Force Docker/Podman mode (works on any OS with Docker installed)
+bash deploy/local-build.sh --edition user --docker
+
+# Other editions
+bash deploy/local-build.sh --edition testing
+bash deploy/local-build.sh --edition developer-stable
+bash deploy/local-build.sh --edition developer-unstable
+
+# Options
+bash deploy/local-build.sh --edition user --no-cache   # skip debootstrap cache
+bash deploy/local-build.sh --edition user --output ~/isos  # custom output dir
+bash deploy/local-build.sh --edition user --dry-run    # print commands only
+```
+
+### Native mode requirements
+
+- Linux (any distro with `live-build` available)
+- `live-build`, `debootstrap`, `xorriso`, `squashfs-tools`
+- Loop device access (`losetup -f` must succeed)
+- Root or passwordless sudo for `lb`
+
+### Docker/Podman mode requirements
+
+- Docker or Podman installed (any OS including macOS/Windows WSL2)
+- `--privileged` container support (standard on Linux; may need config on macOS)
+- ~40 GB free disk
+
+### CI fallback: `NO_RUNNER=true`
+
+If no `iso-builder` runner is online, trigger a pipeline with
+`NO_RUNNER=true` to get a job that prints the exact local-build commands
+for that edition:
+
+```
+https://gitlab.com/openos-project/kde-ecosystem-deving/neon-deving/neon-user/-/pipelines/new
+```
+Set variable `NO_RUNNER` = `true`.
+
+---
+
+## garm-gitlab auto-scaling pool (advanced)
+
+For teams that want fully automated, on-demand VM provisioning without
+managing Terraform state, `garm-gitlab` provisions Incus VMs per job and
+destroys them after. See:
+
+- `deploy/garm-pool-iso-builder.yaml` — pool configuration
+- `deploy/incus-profile-iso-builder.yaml` — Incus VM profile
+- `ci/runners/garm-gitlab/deploy/SETUP.md` in the `gitlab-enhanced` repo
 
 ---
 
 ## Verifying a build
 
-Once a runner is online, trigger a manual build from any edition repo:
+Once any runner is online, trigger a manual build:
 
 ```
 https://gitlab.com/openos-project/kde-ecosystem-deving/neon-deving/neon-user/-/pipelines/new
 ```
 
-Set `CI_PIPELINE_SOURCE=web` and run the `build-user-iso` job manually.
-The job will take 20–40 minutes and produce a `.iso` + `.iso.sha256` artifact.
+The `build-user-iso` job runs manually on push to `main`. It takes 20–40
+minutes and produces a `.iso` + `.iso.sha256` artifact downloadable from
+the pipeline's Artifacts section.

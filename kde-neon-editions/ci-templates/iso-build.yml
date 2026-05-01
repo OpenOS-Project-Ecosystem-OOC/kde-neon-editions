@@ -4,17 +4,39 @@
 #     - project: 'openos-project/kde-ecosystem-deving/neon-deving/kde-neon-editions'
 #       ref: main
 #       file: '/ci-templates/iso-build.yml'
-
+#
+# ── Runner requirements ───────────────────────────────────────────────────────
+#
+# ISO builds require live-build, which needs loop devices and chroot.
+# Jobs are tagged `privileged` + `iso-builder` so they only run on a
+# suitable VM runner.
+#
+# Three ways to provide that runner — all produce the same artifact:
+#
+#   A. Existing machine:
+#        GITLAB_RUNNER_TOKEN=<token> bash deploy/register-runner.sh
+#
+#   B. Cloud VM (Terraform, any provider):
+#        cp deploy/terraform/providers/hetzner.tfvars deploy/terraform/terraform.tfvars
+#        # fill in tokens, then:
+#        terraform -chdir=deploy/terraform apply
+#
+#   C. Local build (no runner needed):
+#        bash deploy/local-build.sh --edition user
+#        bash deploy/local-build.sh --edition user --docker   # Docker/Podman fallback
+#
+# See deploy/RUNNER-SETUP.md for full details.
+#
 # ── Shared script bootstrap ───────────────────────────────────────────────────
 # Option A (CI):       clone kde-neon-editions via CI_JOB_TOKEN and run scripts
 #                      from ci-templates/scripts/ — always uses the latest version.
 # Option B (fallback): use local scripts/ copies in the edition repo — works
 #                      without CI_JOB_TOKEN (local dev, detached pipelines).
-#
-# bootstrap-scripts.sh sources to set and export SCRIPTS_DIR.
 
 .bootstrap-scripts: &bootstrap-scripts
   - . scripts/bootstrap-scripts.sh
+
+# ── ISO build (CI runner) ─────────────────────────────────────────────────────
 
 .iso-build-base:
   stage: build-iso
@@ -60,6 +82,8 @@
     paths:
       - .cache/debootstrap/
 
+# ── ISO publish ───────────────────────────────────────────────────────────────
+
 .iso-publish-base:
   stage: publish
   image: alpine:latest
@@ -70,3 +94,40 @@
     - bash "${SCRIPTS_DIR}/publish-iso.sh"
   rules:
     - if: $CI_COMMIT_BRANCH == $NEON_BRANCH && $CI_PIPELINE_SOURCE == "schedule"
+
+# ── Local build helper (no runner required) ───────────────────────────────────
+#
+# This job prints the local-build.sh command a developer can copy-paste to
+# build the ISO on their own machine. It runs on any shared runner (no tags).
+# Trigger it manually with NO_RUNNER=true when no iso-builder runner is online.
+
+.local-build-instructions:
+  stage: build-iso
+  image: alpine:latest
+  tags: []
+  script:
+    - |
+      echo "========================================================"
+      echo "  No iso-builder runner available."
+      echo "  Build this ISO locally using one of these methods:"
+      echo "========================================================"
+      echo ""
+      echo "  Option 1 — Native Linux (requires live-build):"
+      echo "    git clone ${CI_REPOSITORY_URL} neon-editions"
+      echo "    cd neon-editions"
+      echo "    bash deploy/local-build.sh --edition ${EDITION}"
+      echo ""
+      echo "  Option 2 — Docker/Podman (any OS with Docker):"
+      echo "    git clone ${CI_REPOSITORY_URL} neon-editions"
+      echo "    cd neon-editions"
+      echo "    bash deploy/local-build.sh --edition ${EDITION} --docker"
+      echo ""
+      echo "  Option 3 — Provision a cloud runner (one-time setup):"
+      echo "    See deploy/RUNNER-SETUP.md"
+      echo "    Or: terraform -chdir=deploy/terraform apply"
+      echo ""
+      echo "========================================================"
+  rules:
+    - if: $NO_RUNNER == "true"
+      when: always
+  allow_failure: true

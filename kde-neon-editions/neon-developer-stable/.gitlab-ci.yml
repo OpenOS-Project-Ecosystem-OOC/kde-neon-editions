@@ -75,3 +75,12 @@ publish-developer-stable-iso:
     PUBLISH_PATH: "neon/developer-stable"
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# ── Local build fallback ──────────────────────────────────────────────────────
+# Run with NO_RUNNER=true when no iso-builder runner is available.
+# Prints copy-paste commands to build the ISO locally.
+
+local-build-help:
+  extends: .local-build-instructions
+  variables:
+    EDITION: "developer-stable"

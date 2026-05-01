@@ -1,0 +1,131 @@
+#cloud-config
+# KDE Neon ISO Builder — cloud-init user data
+#
+# Boots any Ubuntu 22.04+ or Debian 12+ cloud VM into a fully configured
+# ISO builder that registers itself as a GitLab runner on first boot.
+#
+# Works with: AWS, Hetzner, DigitalOcean, GCP, Azure, OVH, Vultr, Linode,
+#             Proxmox, OpenStack, bare-metal with cloud-init, Incus/LXD VMs.
+#
+# Pass this file as user-data when creating the VM. The runner registers
+# itself automatically — no SSH required after launch.
+#
+# Required substitutions (replace before use, or pass via Terraform):
+#   @@GITLAB_RUNNER_TOKEN@@   — group runner token from GitLab
+#   @@RUNNER_NAME@@           — descriptive name (e.g. hetzner-cx32-iso-01)
+#
+# Optional substitutions:
+#   @@GITLAB_URL@@            — defaults to https://gitlab.com
+#   @@RUNNER_CONCURRENT@@     — concurrent builds (default: 1)
+#   @@RUNNER_TAGS@@           — comma-separated (default: privileged,iso-builder,neon)
+
+package_update: true
+package_upgrade: true
+
+packages:
+  # Runner infrastructure
+  - curl
+  - wget
+  - gnupg
+  - ca-certificates
+  - apt-transport-https
+  # ISO build toolchain
+  - live-build
+  - ubuntu-defaults-builder
+  - debootstrap
+  - squashfs-tools
+  - xorriso
+  - isolinux
+  - syslinux-common
+  - grub-efi-amd64-bin
+  - grub-pc-bin
+  - mtools
+  - dosfstools
+  # General utilities
+  - rsync
+  - gpg
+  - python3
+  - python3-yaml
+  - git
+  - jq
+
+write_files:
+  # Runner registration script — executed once on first boot
+  - path: /usr/local/bin/register-gitlab-runner.sh
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      set -e
+
+      GITLAB_URL="${GITLAB_URL:-@@GITLAB_URL@@}"
+      GITLAB_URL="${GITLAB_URL:-https://gitlab.com}"
+      RUNNER_TOKEN="@@GITLAB_RUNNER_TOKEN@@"
+      RUNNER_NAME="@@RUNNER_NAME@@"
+      RUNNER_NAME="${RUNNER_NAME:-$(hostname)-iso-builder}"
+      RUNNER_CONCURRENT="${RUNNER_CONCURRENT:-@@RUNNER_CONCURRENT@@}"
+      RUNNER_CONCURRENT="${RUNNER_CONCURRENT:-1}"
+      RUNNER_TAGS="${RUNNER_TAGS:-@@RUNNER_TAGS@@}"
+      RUNNER_TAGS="${RUNNER_TAGS:-privileged,iso-builder,neon}"
+
+      # Install gitlab-runner
+      if ! command -v gitlab-runner >/dev/null 2>&1; then
+        curl -fsSL https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh | bash
+        apt-get install -y gitlab-runner
+      fi
+
+      # Register
+      gitlab-runner register \
+        --non-interactive \
+        --url "${GITLAB_URL}" \
+        --token "${RUNNER_TOKEN}" \
+        --executor "shell" \
+        --description "${RUNNER_NAME}" \
+        --tag-list "${RUNNER_TAGS}" \
+        --run-untagged false \
+        --locked false
+
+      # Set concurrency
+      sed -i "s/^concurrent = .*/concurrent = ${RUNNER_CONCURRENT}/" /etc/gitlab-runner/config.toml
+
+      # Allow gitlab-runner to call lb and debootstrap without password
+      LB_PATH=$(command -v lb 2>/dev/null || echo /usr/bin/lb)
+      DB_PATH=$(command -v debootstrap 2>/dev/null || echo /usr/sbin/debootstrap)
+      printf 'gitlab-runner ALL=(ALL) NOPASSWD: %s, %s\n' "${LB_PATH}" "${DB_PATH}" \
+        > /etc/sudoers.d/gitlab-runner-livebuild
+      chmod 440 /etc/sudoers.d/gitlab-runner-livebuild
+
+      gitlab-runner restart
+      echo "Runner registered: ${RUNNER_NAME}"
+
+  # Systemd one-shot service to run registration after network is up
+  - path: /etc/systemd/system/gitlab-runner-register.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Register GitLab runner on first boot
+      After=network-online.target
+      Wants=network-online.target
+      ConditionPathExists=!/etc/gitlab-runner/.registered
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/register-gitlab-runner.sh
+      ExecStartPost=/bin/touch /etc/gitlab-runner/.registered
+      RemainAfterExit=yes
+      StandardOutput=journal
+      StandardError=journal
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  # Enable and start the registration service
+  - systemctl daemon-reload
+  - systemctl enable gitlab-runner-register.service
+  - systemctl start gitlab-runner-register.service
+
+final_message: |
+  KDE Neon ISO builder cloud-init complete.
+  Runner registration runs via gitlab-runner-register.service.
+  Check status: journalctl -u gitlab-runner-register.service
+  Runner list:  gitlab-runner list
