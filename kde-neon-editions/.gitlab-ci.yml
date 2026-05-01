@@ -9,6 +9,7 @@
 
 stages:
   - lint           # manifest validation, shellcheck, CI YAML syntax
+  - sync-scripts   # push updated ci-templates/scripts/ to all edition repos
   - sync-all       # pull latest from kde-groups/neon across all editions
   - build-all      # trigger all four ISO builds in parallel
   - report         # collect results and post a summary
@@ -89,11 +90,37 @@ lint-ci-yaml:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "push"
 
+# ── Sync shared scripts to edition repos ─────────────────────────────────────
+#
+# Runs on every push to main that touches ci-templates/scripts/.
+# Commits the updated scripts/ directory into each edition repo via the
+# GitLab API so they stay in sync without manual copy-paste.
+
+sync-scripts-to-repos:
+  stage: sync-scripts
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl git python3
+  script:
+    - bash kde-neon-editions/ci-templates/scripts/copy-scripts-to-repos.sh --ci
+  rules:
+    # Only run when scripts actually changed on main
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - kde-neon-editions/ci-templates/scripts/**/*
+    # Allow manual trigger for a forced full sync
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+      allow_failure: false
+
 # ── Upstream sync (all editions) ──────────────────────────────────────────────
 
 .sync-edition: &sync-edition
   stage: sync-all
   image: alpine/git:latest
+  # GITLAB_TOKEN must be set at group level (masked, protected) so sync-upstream.sh
+  # can push the upstream/Neon/* tracking branch back to each edition repo.
+  # Set it at: https://gitlab.com/groups/openos-project/kde-ecosystem-deving/neon-deving/-/settings/ci_cd
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "web"
@@ -106,9 +133,9 @@ sync-neon-user:
     UPSTREAM_BRANCH: "Neon/release"
     EDITION: "user"
   script:
-    - git remote add upstream "${UPSTREAM_REPO_URL}" 2>/dev/null || true
-    - git fetch upstream "${UPSTREAM_BRANCH}" --depth=50
-    - echo "Upstream Neon/release fetched for user edition"
+    - git config --global user.email "neon-mirror-bot@openos-project.gitlab.io"
+    - git config --global user.name "Neon Mirror Bot"
+    - bash kde-neon-editions/ci-templates/scripts/sync-upstream.sh
 
 sync-neon-testing:
   <<: *sync-edition
@@ -117,9 +144,9 @@ sync-neon-testing:
     UPSTREAM_BRANCH: "Neon/release"
     EDITION: "testing"
   script:
-    - git remote add upstream "${UPSTREAM_REPO_URL}" 2>/dev/null || true
-    - git fetch upstream "${UPSTREAM_BRANCH}" --depth=50
-    - echo "Upstream Neon/release fetched for testing edition"
+    - git config --global user.email "neon-mirror-bot@openos-project.gitlab.io"
+    - git config --global user.name "Neon Mirror Bot"
+    - bash kde-neon-editions/ci-templates/scripts/sync-upstream.sh
 
 sync-neon-developer-stable:
   <<: *sync-edition
@@ -128,9 +155,9 @@ sync-neon-developer-stable:
     UPSTREAM_BRANCH: "Neon/stable"
     EDITION: "developer-stable"
   script:
-    - git remote add upstream "${UPSTREAM_REPO_URL}" 2>/dev/null || true
-    - git fetch upstream "${UPSTREAM_BRANCH}" --depth=50
-    - echo "Upstream Neon/stable fetched for developer-stable edition"
+    - git config --global user.email "neon-mirror-bot@openos-project.gitlab.io"
+    - git config --global user.name "Neon Mirror Bot"
+    - bash kde-neon-editions/ci-templates/scripts/sync-upstream.sh
 
 sync-neon-developer-unstable:
   <<: *sync-edition
@@ -139,9 +166,9 @@ sync-neon-developer-unstable:
     UPSTREAM_BRANCH: "Neon/unstable"
     EDITION: "developer-unstable"
   script:
-    - git remote add upstream "${UPSTREAM_REPO_URL}" 2>/dev/null || true
-    - git fetch upstream "${UPSTREAM_BRANCH}" --depth=50
-    - echo "Upstream Neon/unstable fetched for developer-unstable edition"
+    - git config --global user.email "neon-mirror-bot@openos-project.gitlab.io"
+    - git config --global user.name "Neon Mirror Bot"
+    - bash kde-neon-editions/ci-templates/scripts/sync-upstream.sh
 
 # ── Trigger per-edition pipelines in parallel ─────────────────────────────────
 

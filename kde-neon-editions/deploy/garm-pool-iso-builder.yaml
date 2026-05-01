@@ -1,0 +1,80 @@
+# garm-gitlab pool configuration — KDE Neon ISO builder
+#
+# This pool provisions Incus VMs for privileged ISO builds using live-build.
+# VMs need loop devices and chroot, so containers are not sufficient — use
+# virtual-machine type.
+#
+# Prerequisites:
+#   - garm-gitlab running and connected to your GitLab group
+#   - Incus host with sufficient disk (each build needs ~20 GB free)
+#   - Ubuntu Noble base image imported into Incus
+#
+# Apply with:
+#   garm-gitlab pool create --config garm-pool-iso-builder.yaml
+#
+# Or via the garm-gitlab API:
+#   POST /api/v1/pools  (body: this file's content)
+
+pool:
+  name: neon-iso-builders
+  provider: incus
+  enabled: true
+
+  # VM type — containers cannot mount loop devices needed by live-build
+  instance_type: virtual-machine
+
+  image: ubuntu:24.04   # Noble — matches UBUNTU_SERIES in manifests
+
+  flavor: iso-builder   # Incus profile name (see incus-profile-iso-builder.yaml)
+
+  # Keep 1 idle VM warm so builds start immediately after a job is queued.
+  # ISO builds take 20-40 min; having one pre-warmed avoids cold-start delay.
+  min_idle_runners: 1
+  max_runners: 4        # cap concurrent builds (disk/CPU bound)
+
+  # Runner tags — must match tags: [privileged, iso-builder] in .gitlab-ci.yml
+  tags:
+    - privileged
+    - iso-builder
+    - neon
+
+  # GitLab group this pool registers runners into
+  # Set via garm-gitlab config or GARM_GITLAB_GROUP env var
+  # gitlab_group: openos-project/kde-ecosystem-deving/neon-deving
+
+  # Destroy VM after job completes (clean build environment every time)
+  delete_instance_on_job_failure: true
+
+  # Runner idle timeout — tear down warm VMs after 30 min of no jobs
+  idle_timeout: 30m
+
+  # Extra packages installed in the VM before the runner starts
+  # live-build and its deps are installed by the CI job itself, but
+  # pre-installing them here speeds up cold starts significantly.
+  extra_specs:
+    user_data: |
+      #cloud-config
+      package_update: true
+      package_upgrade: false
+      packages:
+        - live-build
+        - ubuntu-defaults-builder
+        - debootstrap
+        - squashfs-tools
+        - xorriso
+        - isolinux
+        - syslinux-common
+        - grub-efi-amd64-bin
+        - grub-pc-bin
+        - mtools
+        - dosfstools
+        - rsync
+        - wget
+        - curl
+        - gpg
+        - ca-certificates
+        - python3
+        - python3-yaml
+        - git
+      runcmd:
+        - systemctl enable --now gitlab-runner || true

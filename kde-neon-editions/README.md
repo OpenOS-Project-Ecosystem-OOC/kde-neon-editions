@@ -42,51 +42,61 @@ Create four projects under your group:
 - `neon-testing`
 - `neon-developer-stable`
 - `neon-developer-unstable`
-- `ci-templates`
 
-### 2. Configure upstream pull mirroring
+### 2. Configure upstream sync schedules
+
+Each edition repo has a scheduled pipeline that runs `sync-upstream.sh` every
+30 minutes to pull the latest commits from `kde-groups/neon` into a tracking
+branch. Schedules are created via:
 
 ```bash
 export GITLAB_TOKEN="<your-api-token>"
-export GITLAB_GROUP="openos-project/kde-ecosystem-deving/kde-groups/neon"
+export GITLAB_GROUP="openos-project/kde-ecosystem-deving/neon-deving"
 bash ci-templates/scripts/setup-mirror.sh
 ```
 
+To trigger an immediate sync without waiting for the schedule:
+
+```bash
+bash ci-templates/scripts/trigger-mirror-sync.sh
+```
+
+> **Note:** GitLab pull mirroring (the built-in mirror feature) requires
+> GitLab Premium. The CI-based sync approach works on the free tier.
+
 ### 3. Set CI/CD variables
 
-In each project (Settings → CI/CD → Variables):
+Set these at the **group level** (`neon-deving` → Settings → CI/CD → Variables)
+so all edition repos inherit them:
 
-| Variable | Value | Masked |
+| Variable | Value | Masked | Protected |
+|---|---|---|---|
+| `GITLAB_TOKEN` | Personal access token (api + write_repository + write_packages) | ✅ | ✅ |
+
+Set these **per project** (or override at group level) when ready:
+
+| Variable | Value | Notes |
 |---|---|---|
-| `GITLAB_TOKEN` | Project access token (write_repository + write_packages) | ✅ |
-| `GPG_SIGNING_KEY` | Fingerprint of your ISO signing key | No |
-| `GPG_PRIVATE_KEY` | Armored private key export | ✅ (file type) |
-
-For rsync publishing, also set:
-- `RSYNC_HOST`, `RSYNC_PATH`, `SSH_PRIVATE_KEY`
+| `GPG_SIGNING_KEY` | GPG key fingerprint | ISO signing — optional, skipped if unset |
+| `GPG_PRIVATE_KEY` | Armored private key (`gpg --armor --export-secret-keys`) | File type, protected |
+| `PUBLISH_TARGET` | `gitlab-packages` (default) or `rsync` | Already set to `gitlab-packages` |
+| `RSYNC_HOST` | Destination host | Only needed for rsync publishing |
+| `RSYNC_PATH` | Destination path on host | Only needed for rsync publishing |
+| `SSH_PRIVATE_KEY` | SSH private key for rsync | File type, only needed for rsync |
 
 ### 4. Register a privileged runner
 
-ISO builds require `live-build` which needs loop devices and chroot.
+ISO builds require `live-build` with loop devices — must run on a VM runner,
+not a container. Two options:
 
-```toml
-# /etc/gitlab-runner/config.toml
-[[runners]]
-  name = "neon-iso-builder"
-  executor = "docker"
-  [runners.docker]
-    image = "ubuntu:noble"
-    privileged = true
-    volumes = ["/cache", "/dev:/dev"]
-```
-
-Tag the runner `privileged` and add that tag to your runner registration.
+- **garm-gitlab (recommended):** auto-scaling Incus VMs. See `deploy/RUNNER-SETUP.md`.
+- **Static runner:** single dedicated build machine. See `deploy/RUNNER-SETUP.md`.
 
 ### 5. Schedule nightly builds
 
-In the root repo: CI/CD → Schedules → New schedule
-- Interval: `0 2 * * *` (02:00 UTC nightly)
-- Target branch: `main`
+Already configured: `0 2 * * *` UTC on the root `kde-neon-editions` repo.
+
+To add or modify: CI/CD → Schedules in the root repo.
 
 ## Upstream Relationship
 

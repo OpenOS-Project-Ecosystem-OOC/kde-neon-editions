@@ -20,7 +20,8 @@
   stage: build-iso
   image: ubuntu:noble
   tags:
-    - privileged  # live-build requires root/privileged runner
+    - privileged    # live-build requires loop devices — must run on a VM runner
+    - iso-builder   # garm-gitlab pool: neon-iso-builders (see deploy/garm-pool-iso-builder.yaml)
   before_script:
     - *bootstrap-scripts
     - apt-get update -qq

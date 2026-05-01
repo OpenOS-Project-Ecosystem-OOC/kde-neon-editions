@@ -1,0 +1,32 @@
+# Incus profile for KDE Neon ISO builder VMs
+#
+# Apply with:
+#   incus profile create iso-builder
+#   incus profile edit iso-builder < incus-profile-iso-builder.yaml
+#
+# Requirements per VM:
+#   - 4 vCPU minimum (lb build is CPU-bound during debootstrap + squashfs)
+#   - 8 GB RAM (live-build chroot + squashfs compression)
+#   - 40 GB disk (Ubuntu base ~4 GB, packages ~8 GB, ISO output ~4 GB, overhead)
+#   - KVM acceleration (nested virt not needed — VMs run on bare metal Incus host)
+
+config:
+  limits.cpu: "4"
+  limits.memory: 8GB
+  # Allow loop device access inside the VM (needed by live-build)
+  raw.lxc: ""   # N/A for VMs — loop devices work natively in VMs
+  security.secureboot: "false"   # Noble live-build images are unsigned
+
+description: KDE Neon ISO builder — 4 vCPU / 8 GB RAM / 40 GB disk
+
+devices:
+  root:
+    path: /
+    pool: default
+    size: 40GB
+    type: disk
+
+  # Expose /dev/kvm for QEMU smoke tests (optional — remove if not needed)
+  kvm:
+    path: /dev/kvm
+    type: unix-char
