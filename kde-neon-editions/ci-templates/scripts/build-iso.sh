@@ -64,7 +64,7 @@ echo "    Manifest: ${MANIFEST}"
 # ── Clone internal source repos ───────────────────────────────────────────────
 
 WORK_DIR="$(mktemp -d /tmp/neon-build-XXXXXX)"
-trap "rm -rf ${WORK_DIR}" EXIT
+trap 'rm -rf "${WORK_DIR}"' EXIT
 
 clone_internal "seeds"              "${NEON_BRANCH}" "${WORK_DIR}/seeds"
 clone_internal "livecd-rootfs"      "${NEON_BRANCH}" "${WORK_DIR}/livecd-rootfs"
